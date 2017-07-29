@@ -53,8 +53,8 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Prolog.fs" />
     <Compile Include="Serialization.fs" />
-    <Compile Include="ProvidedTypes.fs" />
     <Compile Include="ProvidedTypes.fsi" />
+    <Compile Include="ProvidedTypes.fs" />
     <Compile Include="IntrospectionParser.fs" />
     <Compile Include="GraphQLProvider.fs" />
     <None Include="Script.fsx" />

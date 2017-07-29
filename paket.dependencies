@@ -12,6 +12,7 @@ nuget Expecto
 nuget FParsec
 nuget FSharp.Core ~> 4.0.0.1 redirects: force
 nuget Newtonsoft.Json
+nuget System.Reactive
 nuget System.ValueTuple
 
 group Build

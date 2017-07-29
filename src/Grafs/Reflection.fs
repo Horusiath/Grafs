@@ -50,6 +50,36 @@ module internal Reflection =
         #else
         t.GetMethods()
         #endif
+
+    let private listDef = typedefof<list<_>>
+    let private optionDef = typedefof<option<_>>
+
+    /// Returns a pair of constructors (Cons, Nil) for a F# list of provided type.
+    let listBuilder t = 
+        let tList = listDef.MakeGenericType([| t |]).GetTypeInfo()
+        let nil = tList.GetDeclaredProperty("Empty").GetValue (null)
+        let cons = 
+            let cons' = tList.GetDeclaredMethod("Cons")
+            fun item list -> cons'.Invoke (null, [| item; list |])
+        (cons, nil)
+
+    /// Returns a pair of constructors (Some, None) for a F# option of provided type.
+    let optionBuilder t =
+        let tOption = optionDef.MakeGenericType([|t|]).GetTypeInfo()
+        let none = tOption.GetDeclaredProperty("None").GetValue(null)
+        let some =
+            let createSome = tOption.GetDeclaredMethod "Some"
+            fun value -> 
+                if value <> null 
+                then
+                    let valueType = value.GetType().GetTypeInfo()
+                    if valueType = tOption
+                    then value
+                    elif t .GetTypeInfo().IsAssignableFrom(valueType)
+                    then createSome.Invoke(null, [| value |])
+                    else null
+                else none
+        (some, none)
         
     /// Finds a first constructor for target type that has matching fields.
     let matchConstructor (t: Type) (fields: string []) =

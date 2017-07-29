@@ -444,7 +444,7 @@ module internal Execution =
                 try
                     resolve resolveFieldCtx value
                     |> AsyncVal.ofValue
-                with e -> AsyncVal.Failure(e)
+                with e -> AsyncVal.ofError(e)
 
         | Resolve.BoxedAsync(_, _, resolve) ->
             fun resolveFieldCtx value -> 

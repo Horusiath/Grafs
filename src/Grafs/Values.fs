@@ -66,7 +66,7 @@ let rec internal compileByType (errMsg: string) (inputDef: InputDef): ExecuteInp
             | _ -> null                 
     | List (Input innerdef) -> 
         let inner = compileByType errMsg innerdef       
-        let cons, nil = ReflectionHelper.listOfType innerdef.Type
+        let cons, nil = Reflection.listBuilder innerdef.Type
 
         fun value variables ->
             match value with
@@ -80,7 +80,7 @@ let rec internal compileByType (errMsg: string) (inputDef: InputDef): ExecuteInp
                 if single = null then null else cons single nil
     | Nullable (Input innerdef) -> 
         let inner = compileByType errMsg innerdef
-        let some, none = ReflectionHelper.optionOfType innerdef.Type
+        let some, none = Reflection.optionBuilder innerdef.Type
                 
         fun variables value ->
             let i = inner variables value
@@ -110,7 +110,7 @@ let rec private coerceVariableValue isNullable typedef (vardef: VarDef) (input: 
             raise (GQLException <| errMsg + (sprintf "expected value of type %s but got None" scalardef.Name))
         | Some res -> res
     | Nullable (Input innerdef) -> 
-        let some, none = ReflectionHelper.optionOfType innerdef.Type
+        let some, none = Reflection.optionBuilder innerdef.Type
         let coerced = coerceVariableValue true innerdef vardef input errMsg
         if coerced <> null
         then 
@@ -120,7 +120,7 @@ let rec private coerceVariableValue isNullable typedef (vardef: VarDef) (input: 
             else raise (GQLException <| errMsg + (sprintf "value of type %O is not assignable from %O" innerdef.Type (coerced.GetType())))
         else none
     | List (Input innerdef) ->
-        let cons, nil = ReflectionHelper.listOfType innerdef.Type
+        let cons, nil = Reflection.listBuilder innerdef.Type
         match input with
         | null when isNullable -> null
         | null -> raise(GQLException <| errMsg + (sprintf "expected value of type %s, but no value was found." (vardef.TypeDef.ToString())))

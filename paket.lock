@@ -10,6 +10,18 @@ NUGET
     FSharp.Core (4.0.0.1) - redirects: force
     Mono.Cecil (0.9.6.4)
     Newtonsoft.Json (10.0.3)
+    System.Reactive (3.1.1)
+      System.Reactive.PlatformServices (>= 3.1.1)
+      System.Reactive.Windows.Threading (>= 3.1.1)
+    System.Reactive.Core (3.1.1)
+      System.Reactive.Interfaces (>= 3.1.1)
+    System.Reactive.Interfaces (3.1.1)
+    System.Reactive.Linq (3.1.1)
+      System.Reactive.Core (>= 3.1.1)
+    System.Reactive.PlatformServices (3.1.1)
+      System.Reactive.Linq (>= 3.1.1)
+    System.Reactive.Windows.Threading (3.1.1)
+      System.Reactive.Core (>= 3.1.1)
     System.ValueTuple (4.3.1)
 
 GROUP Build

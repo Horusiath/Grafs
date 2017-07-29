@@ -4,6 +4,10 @@
 namespace Grafs
 
 open System
+open System.Reactive
+open System.Reactive.Linq
+open System.Reactive.Subjects
+open System.Reactive.Disposables
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Grafs.Ast
@@ -40,7 +44,7 @@ type SchemaConfig =
                 | false, _ -> Observable.Empty()
             member this.Publish<'T> (subIdent: string) (value: 'T) =
                 match registeredSubscriptions.TryGetValue(subIdent) with
-                | true, (sub, channel) ->
+                | true, (_, channel) ->
                     channel.OnNext(box value)
                 | false, _ -> printfn "Error: Tried to publish on non-existent channel `%s`" subIdent
         }
