@@ -57,6 +57,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Prolog.fs" />
     <Compile Include="AsyncValTests.fs" />
+    <Compile Include="ReflectedSchemaTests.fs" />
     <Compile Include="AbstractionTests.fs" />
     <Compile Include="CoercionTests.fs" />
     <Compile Include="DeferredTests.fs" />

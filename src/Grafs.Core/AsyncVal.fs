@@ -7,7 +7,8 @@ open System.Collections.Generic
 
 /// A common lightweight abstraction over either an asynhronous computation 
 /// with value deferred in time, or a synchronous computation with a value 
-/// available right away.
+/// available right away. It's meaningful, that this is a value type, causing
+/// no heap allocations and no GC pressure.
 [<Struct>]
 type AsyncVal<'T> =
     | Synchronous of value:'T

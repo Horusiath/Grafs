@@ -70,6 +70,8 @@ let tests =
         test "AsyncVal sequential collection resolves all values in order of execution" {
             let mutable flag = "none"
             let a = async {
+                // if async routines are run in order, this flag assignment should be first
+                // even thou we are sleeping here
                 do! Async.Sleep 1000
                 flag <- "a"
                 return 2
@@ -86,7 +88,8 @@ let tests =
         test "AsyncVal parallel collection resolves all values with no order of execution" {
             let mutable flag = "none"
             let a = async {
-                do! Async.Sleep 1000
+                // if async routines are run in parallel, this flag assignment should be second
+                do! Async.Sleep 1000 
                 flag <- "a"
                 return 2
             }
