@@ -1,5 +1,3 @@
-FSharp.Core
+System.ValueTuple
 Expecto
-group Test
-NUnit
-NUnit.Runners
+Expecto.BenchmarkDotNet

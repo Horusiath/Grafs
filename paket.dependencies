@@ -9,6 +9,7 @@ source https://nuget.org/api/v2
 #     nuget FSharp.Core ~> 4.1.0 redirects: force
 
 nuget Expecto
+nuget Expecto.BenchmarkDotNet
 nuget FParsec
 nuget FSharp.Core ~> 4.0.0.1 redirects: force
 nuget Newtonsoft.Json
