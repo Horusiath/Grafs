@@ -52,7 +52,14 @@
   <Import Project="$(FSharpTargetsPath)" Condition="Exists('$(FSharpTargetsPath)')" />
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
-    <Compile Include="Library.fs" />
+    <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Prolog.fs" />
+    <Compile Include="Reflection.fs" />
+    <Compile Include="Values.fs" />
+    <Compile Include="Planning.fs" />
+    <Compile Include="Execution.fs" />
+    <Compile Include="Schema.fs" />
+    <Compile Include="Executor.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />
     <None Include="paket.template" />
@@ -63,8 +70,6 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Grafs.Core\Grafs.Core.fsproj">
       <Name>Grafs.Core</Name>
       <Project>{83e1215e-7931-45ac-b643-70c9bf7016fc}</Project>

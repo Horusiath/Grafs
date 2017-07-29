@@ -8,13 +8,14 @@ open System.Runtime.InteropServices
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [<assembly: AssemblyTitle("Grafs.Client")>]
-[<assembly: AssemblyDescription("")>]
+[<assembly: AssemblyDescription("FSharp implementation of Facebook GraphQL query language")>]
 [<assembly: AssemblyConfiguration("")>]
-[<assembly: AssemblyCompany("")>]
+[<assembly: AssemblyCompany("Bazinga Technologies Inc.")>]
 [<assembly: AssemblyProduct("Grafs.Client")>]
-[<assembly: AssemblyCopyright("Copyright ©  2017")>]
+[<assembly: AssemblyCopyright("Copyright © Bazinga Technologies Inc. 2017")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
+[<assembly: InternalsVisibleToAttribute("Grafs.Tests")>]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 

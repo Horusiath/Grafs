@@ -9,6 +9,7 @@ NUGET
     FParsec (1.0.2)
     FSharp.Core (4.0.0.1) - redirects: force
     Mono.Cecil (0.9.6.4)
+    Newtonsoft.Json (10.0.3)
     System.ValueTuple (4.3.1)
 
 GROUP Build
