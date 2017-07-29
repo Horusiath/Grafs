@@ -1,4 +1,5 @@
 FSharp.Core
+Expecto
 group Test
 NUnit
 NUnit.Runners

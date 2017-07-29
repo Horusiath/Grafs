@@ -1,8 +1,14 @@
 RESTRICTION: >= net45
 NUGET
   remote: https://www.nuget.org/api/v2
+    Argu (3.7)
+    Expecto (4.1.1)
+      Argu (>= 3.7)
+      FSharp.Core (>= 3.1.2.5)
+      Mono.Cecil (>= 0.9.6.4)
     FParsec (1.0.2)
     FSharp.Core (4.0.0.1) - redirects: force
+    Mono.Cecil (0.9.6.4)
     System.ValueTuple (4.3.1)
 
 GROUP Build
