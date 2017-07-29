@@ -1,0 +1,25 @@
+type project
+title
+    Grafs
+owners
+    Bazinga Technologies Inc.
+authors 
+    Bazinga Technologies Inc.
+projectUrl
+    https://github.com/fsprojects/Grafs
+iconUrl
+    https://raw.githubusercontent.com/fsprojects/Grafs/master/docs/files/img/logo.png
+licenseUrl
+    https://github.com/fsprojects/Grafs/blob/master/LICENSE.txt
+requireLicenseAcceptance
+    false
+copyright
+    Copyright 2015
+tags
+    fsharp graphql
+summary
+    A F# implementation of GraphQL language for server and client
+description
+    Description not set
+
+
