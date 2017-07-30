@@ -23,11 +23,12 @@ type MutationAttribute() = inherit GQLAttribute()
 [<AttributeUsage(AttributeTargets.Method|||AttributeTargets.Property)>]
 type SubscriptionAttribute() = inherit GQLAttribute()
 
-[<AttributeUsage(AttributeTargets.Method|||AttributeTargets.Property)>]
+[<AttributeUsage(AttributeTargets.All)>]
 type DescriptionAttribute(text: string) =
     inherit GQLAttribute()
     member __.Text = text
-
+    
+    
 module internal Reflection =
 
     /// Returns array of all public instance properties declared in target type.
@@ -80,24 +81,6 @@ module internal Reflection =
                     else null
                 else none
         (some, none)
-        
-    /// Finds a first constructor for target type that has matching fields.
-    let matchConstructor (t: Type) (fields: string []) =
-        if FSharpType.IsRecord(t, true) then FSharpValue.PreComputeRecordConstructorInfo(t, true)
-        else
-            let constructors = t.GetConstructors(BindingFlags.NonPublic|||BindingFlags.Public|||BindingFlags.Instance)
-            let fieldNames = 
-                fields
-                |> Set.ofArray
-            let (ctor, _) =
-                constructors
-                |> Array.map (fun ctor -> (ctor, ctor.GetParameters() |> Array.map (fun param -> param.Name)))
-                // start from most complete constructors
-                |> Array.sortBy (fun (_, paramNames) -> -paramNames.Length)                  
-                // try match field with params by name
-                // at last, default constructor should be used if defined
-                |> Array.find (fun (_, paramNames) -> Set.isSubset (Set.ofArray paramNames) fieldNames)    
-            ctor
             
     [<Flags>]
     type MemberMetadata =
@@ -115,6 +98,7 @@ module internal Reflection =
 
     type Param = { Name: string; Type: Type; DefaultValue: obj option }
 
+    [<CustomEquality; NoComparison>]
     type Member =
         | Property of name:string * returnType:Type * meta:MemberMetadata * getter:MethodInfo * setter:MethodInfo option
         | Method   of name:string * returnType:Type * meta:MemberMetadata * params:Param[] * caller:MethodInfo
@@ -122,66 +106,12 @@ module internal Reflection =
             match x with
             | Property(_,t,_,_,_) -> t
             | Method(_,t,_,_,_) -> t
-
-    let private shouldInclude (m: #MemberInfo) =
-        if m.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
-        then
-            match box m with
-            | :? PropertyInfo as info -> info.PropertyType.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
-            | :? MethodInfo as info -> info.ReturnType.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
-        else false
-
-    let private extractFlags attrs =
-        let attr2Flag acc (a: Attribute) =
-            match a with
-            | :? QueryAttribute                -> { acc with IsQuery = true }
-            | :? MutationAttribute             -> { acc with IsMutation = true }
-            | :? SubscriptionAttribute         -> { acc with IsSubscription = true }
-            | :? ObsoleteAttribute as obsolete -> { acc with DeprecationReason = Some obsolete.Message }
-            | :? DescriptionAttribute as desc  -> { acc with Description = Some desc.Text }
-            | _ -> acc
-        attrs |> Seq.fold attr2Flag MemberMetadata.Zero
-
-    let private camelCase (str: string) =
-        if Char.IsLower str.[0]
-        then str
-        else Char.ToLower(str.[0]).ToString() + str.Substring(1)
-
-    let private parameter2Param (p: ParameterInfo) =
-        { Name = p.Name |> camelCase
-          Type = p.ParameterType
-          DefaultValue = p.DefaultValue |> Option.ofObj }
-
-    let private prop2Member (p:PropertyInfo) =
-        let name = p.Name |> camelCase
-        let flags = p.GetCustomAttributes() |> extractFlags
-        Property(name, p.PropertyType, flags, p.GetMethod, p.SetMethod |> Option.ofObj)
-
-    let private method2Member (m:MethodInfo) =
-        let name = m.Name |> camelCase
-        let flags = m.GetCustomAttributes() |> extractFlags
-        let args =
-            m.GetParameters()
-            |> Array.map parameter2Param
-        Method(name, m.ReturnType, flags, args, m)
-
-    let inline private getAttributes (t: Type) = t.GetCustomAttributes()
-
-    let private getGenericArgs (t: Type) =
-        if t.IsGenericType
-        then t.GetGenericArguments()
-        else [||]
-
-    let private getMembers (t: Type) =
-        let properties =
-            getProperties t
-            |> Array.filter shouldInclude
-            |> Array.map prop2Member
-        let methods =
-            getMethods t
-            |> Array.filter shouldInclude
-            |> Array.map method2Member
-        Array.append methods properties
+        interface IEquatable<Member> with
+            member x.Equals(other: Member) =
+                match x, other with
+                | Property(n1, r1, m1, _, _), Property(n2, r2, m2, _, _) -> n1 = n2 && r1 = r2 && m1 = m2
+                | Method(n1, r1, m1, p1, _), Method(n2, r2, m2, p2, _) -> n1 = n2 && r1 = r2 && m1 = m2 && p1 = p2
+                | _, _ -> false
 
     [<Flags>]
     type TypeKind =
@@ -245,6 +175,84 @@ module internal Reflection =
               Errors = System.Collections.Generic.List<string>() }
         member x.AddError err = x.Errors.Add err
         member x.MarkAsScanned t = x.ScannedTypes.Add t |> ignore
+        
+    /// Finds a first constructor for target type that has matching fields.
+    let matchConstructor (t: Type) (fields: string []) =
+        if FSharpType.IsRecord(t, true) then FSharpValue.PreComputeRecordConstructorInfo(t, true)
+        else
+            let constructors = t.GetConstructors(BindingFlags.NonPublic|||BindingFlags.Public|||BindingFlags.Instance)
+            let fieldNames = 
+                fields
+                |> Set.ofArray
+            let (ctor, _) =
+                constructors
+                |> Array.map (fun ctor -> (ctor, ctor.GetParameters() |> Array.map (fun param -> param.Name)))
+                // start from most complete constructors
+                |> Array.sortBy (fun (_, paramNames) -> -paramNames.Length)                  
+                // try match field with params by name
+                // at last, default constructor should be used if defined
+                |> Array.find (fun (_, paramNames) -> Set.isSubset (Set.ofArray paramNames) fieldNames)    
+            ctor
+
+    let private shouldInclude (m: #MemberInfo) =
+        if m.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
+        then
+            match box m with
+            | :? PropertyInfo as info -> info.PropertyType.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
+            | :? MethodInfo as info -> info.ReturnType.GetCustomAttributes(typeof<GQLIgnoreAttribute>) |> Seq.isEmpty
+        else false
+
+    let private extractFlags attrs =
+        let attr2Flag acc (a: Attribute) =
+            match a with
+            | :? QueryAttribute                -> { acc with IsQuery = true }
+            | :? MutationAttribute             -> { acc with IsMutation = true }
+            | :? SubscriptionAttribute         -> { acc with IsSubscription = true }
+            | :? ObsoleteAttribute as obsolete -> { acc with DeprecationReason = Some obsolete.Message }
+            | :? DescriptionAttribute as desc  -> { acc with Description = Some desc.Text }
+            | _ -> acc
+        attrs |> Seq.fold attr2Flag MemberMetadata.Zero
+
+    let private camelCase (str: string) =
+        if Char.IsLower str.[0]
+        then str
+        else Char.ToLower(str.[0]).ToString() + str.Substring(1)
+
+    let private parameter2Param (p: ParameterInfo) =
+        { Name = p.Name |> camelCase
+          Type = p.ParameterType
+          DefaultValue = p.DefaultValue |> Option.ofObj }
+
+    let private prop2Member (p:PropertyInfo) =
+        let name = p.Name |> camelCase
+        let flags = p.GetCustomAttributes() |> extractFlags
+        Property(name, p.PropertyType, flags, p.GetMethod, p.SetMethod |> Option.ofObj)
+
+    let private method2Member (m:MethodInfo) =
+        let name = m.Name |> camelCase
+        let flags = m.GetCustomAttributes() |> extractFlags
+        let args =
+            m.GetParameters()
+            |> Array.map parameter2Param
+        Method(name, m.ReturnType, flags, args, m)
+
+    let inline private getAttributes (t: Type) = t.GetCustomAttributes()
+
+    let private getGenericArgs (t: Type) =
+        if t.IsGenericType
+        then t.GetGenericArguments()
+        else [||]
+
+    let private getMembers (t: Type) =
+        let properties =
+            getProperties t
+            |> Array.filter shouldInclude
+            |> Array.map prop2Member
+        let methods =
+            getMethods t
+            |> Array.filter shouldInclude
+            |> Array.map method2Member
+        Array.append methods properties
 
     let rec private typeName (ctx: ConstructionContext) genericsAllowed (t: Type) =
         let tparams = getGenericArgs t

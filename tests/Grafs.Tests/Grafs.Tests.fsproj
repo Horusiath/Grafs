@@ -60,6 +60,7 @@
     <Compile Include="ReflectedSchemaTests.fs" />
     <Compile Include="AbstractionTests.fs" />
     <Compile Include="CoercionTests.fs" />
+    <Compile Include="ReflectedTests.fs" />
     <Compile Include="DeferredTests.fs" />
     <Compile Include="DirectivesTests.fs" />
     <Compile Include="ExecutionTests.fs" />

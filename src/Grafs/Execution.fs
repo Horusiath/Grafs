@@ -182,7 +182,7 @@ module internal Execution =
         | Some resolveType -> resolveType
         | None -> defaultResolveType possibleTypesFn uniondef
 
-    let private createFieldContext objdef ctx (info: ExecutionInfo) =
+    let private createFieldContext objdef ctx (info: GQLInfo) =
         let fdef = info.Definition
         let args = getArgumentValues fdef.Args info.Ast.Arguments ctx.Variables
         { ExecutionInfo = info
@@ -413,7 +413,7 @@ module internal Execution =
         | _ -> failwithf "Unexpected value of returnDef: %O" returnDef
 
 
-    and buildObjectFields (fields: ExecutionInfo list) (objdef: ObjectDef) (ctx: ResolveFieldContext) (fieldExecuteMap: FieldExecuteMap) (name: string) (value: obj): AsyncVal<ResolverTree> =
+    and buildObjectFields (fields: GQLInfo list) (objdef: ObjectDef) (ctx: ResolveFieldContext) (fieldExecuteMap: FieldExecuteMap) (name: string) (value: obj): AsyncVal<ResolverTree> =
         let rec build (acc: ResolverTree list) = function
             | info::xs ->
                 let fieldCtx = createFieldContext objdef ctx info
@@ -465,7 +465,7 @@ module internal Execution =
             | fieldName -> objectType.Fields |> Map.tryFind fieldName
 
         
-    let private executeQueryOrMutation (resultSet: (string * ExecutionInfo) []) (ctx: ExecutionContext) (objdef: ObjectDef) (fieldExecuteMap: FieldExecuteMap) value =
+    let private executeQueryOrMutation (resultSet: (string * GQLInfo) []) (ctx: ExecutionContext) (objdef: ObjectDef) (fieldExecuteMap: FieldExecuteMap) value =
         let resultTrees =
             resultSet
             |> Array.map (fun (name, info) ->
@@ -580,7 +580,7 @@ module internal Execution =
                 |> Some
         dict, deferredResults
 
-    let private executeSubscription (resultSet: (string * ExecutionInfo) []) (ctx: ExecutionContext) (objdef: SubscriptionObjectDef) (fieldExecuteMap: FieldExecuteMap) (subscriptionProvider: ISubscriptionProvider) value = 
+    let private executeSubscription (resultSet: (string * GQLInfo) []) (ctx: ExecutionContext) (objdef: SubscriptionObjectDef) (fieldExecuteMap: FieldExecuteMap) (subscriptionProvider: ISubscriptionProvider) value = 
         // Subscription queries can only have one root field
         let name, info = Array.head resultSet
         let subdef = info.Definition :?> SubscriptionFieldDef

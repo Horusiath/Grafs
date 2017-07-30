@@ -147,7 +147,7 @@ let private doesFragmentTypeApply (schema: ISchema) fragment (objectType: Object
 let private isDeferredField (field: Field): bool =
     field.Directives |> List.exists(fun d -> d.Name = "defer")
                 
-type PlanningStage = ExecutionInfo * DeferredExecutionInfo list * string list
+type PlanningStage = GQLInfo * DeferredExecutionInfo list * string list
 
 let private getSelectionFrag = function
     | SelectFields(fragmentFields) -> fragmentFields
@@ -179,7 +179,7 @@ and private planSelection (ctx: PlanningContext) (selectionSet: Selection list) 
     let parentDef = downcast info.ReturnDef
     let plannedFields, deferredFields' =
         selectionSet
-        |> List.fold(fun (fields: ExecutionInfo list, deferredFields: DeferredExecutionInfo list) selection ->
+        |> List.fold(fun (fields: GQLInfo list, deferredFields: DeferredExecutionInfo list) selection ->
             //FIXME: includer is not passed along from top level fragments (both inline and spreads)
             let includer = getIncluder selection.Directives info.Include
             let updatedInfo = { info with Include = includer }
@@ -225,14 +225,14 @@ and private planAbstraction (ctx:PlanningContext) (selectionSet: Selection list)
     let info, deferredFields, path = stage
     let plannedTypeFields, deferredFields' =
         selectionSet
-        |> List.fold(fun (fields: Map<string, ExecutionInfo list>, deferredFields: DeferredExecutionInfo list) selection ->
+        |> List.fold(fun (fields: Map<string, GQLInfo list>, deferredFields: DeferredExecutionInfo list) selection ->
             let includer = getIncluder selection.Directives info.Include
             let innerData = { info with Include = includer }
             match selection with
             | Field field ->
                 let a = abstractionInfo ctx (info.ReturnDef :?> AbstractDef) field typeCondition includer
                 // Make sure that we properly deal with the deferred fields
-                let foldPlan (f:Map<string, ExecutionInfo list>, d, _) k data =
+                let foldPlan (f:Map<string, GQLInfo list>, d, _) k data =
                     let f', d', p' = plan ctx (data, d, path)
                     f.Add(k, [f']), d', p'
                 let infoMap, deferredFields', path' = Map.fold (foldPlan) (Map.empty, deferredFields, []) a  
