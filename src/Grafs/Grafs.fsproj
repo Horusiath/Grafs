@@ -54,7 +54,9 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Prolog.fs" />
+    <Compile Include="TypeShape.fs" />
     <Compile Include="Reflection.fs" />
+    <Compile Include="Construction.fs" />
     <Compile Include="Values.fs" />
     <Compile Include="Planning.fs" />
     <Compile Include="Execution.fs" />
