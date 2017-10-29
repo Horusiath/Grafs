@@ -5,10 +5,13 @@
 module Grafs.Tests.TypeShapeTests
 
 open System
+open System.Collections.Generic
+open System.Runtime.Serialization
 open System.Reflection
 open FSharp.Reflection
 open Expecto
 open Grafs.TypeShape
+open FsCheck
 
 type TypeWithDefaultCtor(x : int) =
     new () = new TypeWithDefaultCtor(42)
@@ -37,6 +40,7 @@ type SimplePoco(x : string, y : int) =
     static let staticField = 42
     member __.X = x
     member __.Y = y
+    member __.DoSmth () = ()
 
 type Union7 = 
     | C1U7 of int * _tag:string
@@ -48,6 +52,11 @@ type Union7 =
     | C7U7
     
 type P = Z | S of P
+
+type Record7 = 
+    { 
+        A1 : int ; A2 : string ; A3 : bool ; A4 : byte ; A5 : byte[] ; A6 : decimal ; A7 : int16 
+    }
 
 [<Struct>]
 type StructRecord = { A : int ; B : string }
@@ -65,6 +74,18 @@ let testPrim<'T>() =
     shapeType = typeof<TypeShape<'T>> |> Expect.isTrue <| sprintf "Shape of %O should be %O" (shape.GetType()) typeof<TypeShape<'T>>
     let accepter = { new ITypeShapeVisitor<bool> with member __.Visit<'a>() = typeof<'T> = typeof<'a> }
     shape.Accept accepter |> Expect.isTrue <| sprintf "Shape of %O should accept generic visitor" shapeType
+    
+let testSeq<'E, 'T when 'E :> seq<'T>> (accepter) =
+    match shapeof<'E> with 
+    | Shape.Enumerable s -> s.Accept (accepter typeof<'E> typeof<'T>)
+    | _ -> false
+    |> Expect.isTrue <| sprintf "Visitor enumerable pattern works with %O" typeof<'t>
+    
+let testCollection<'E, 'T when 'E :> ICollection<'T>> (accepter) =
+    match shapeof<'E> with 
+    | Shape.Collection s -> s.Accept (accepter typeof<'E> typeof<'T>)
+    | _ -> false
+    |> Expect.isTrue <| sprintf "Visitor collection pattern works with %O" typeof<'t>
     
 [<NoEquality; NoComparison>]
 type NoEqNoComp = NoEqNoComp
@@ -366,138 +387,313 @@ let tests =
 
             let cloner = mkCloner<CSharpRecord>()
             let target = cloner source
-            test <@ obj.ReferenceEquals(source, target) |> not @>
-            test <@ source = target @>
-            test <@ source.GetterOnly <> target.GetterOnly @>
+            Expect.isFalse (obj.ReferenceEquals(source, target)) "A deep cloning expected"
+            Expect.equal source target "Cloned object should equal source using custom equality"
+            Expect.notEqual source.GetterOnly target.GetterOnly "Cloned object custom fields should differ"
 
             let sCloner = mkCloner<CSharpRecord> ()
             let target = sCloner source
-            test <@ obj.ReferenceEquals(source, target) |> not @>
-            test <@ source = target @>
-            test <@ source.GetterOnly <> target.GetterOnly @>
+            Expect.isFalse (obj.ReferenceEquals(source, target)) "A deep cloning expected twice"
+            Expect.equal source target "Cloned object should equal source using custom equality twice"
+            Expect.notEqual source.GetterOnly target.GetterOnly "Twice cloned object custom fields should differ"
         }
 
         test "Shape Poco" {
+            match TypeShape.Create<SimplePoco>() with
+            | Shape.Poco s ->
+                s.Accept { new IPocoVisitor<bool> with
+                    member __.Visit (shape : ShapePoco<'P>) =
+                        Expect.equal typeof<'P> typeof<SimplePoco> "Expected a SimplePoco"
+                        Expect.equal 2 shape.Fields.Length "SimplePoco has 2 public fields"
+                        Expect.equal 2 shape.Properties.Length "SimplePoco has 2 public properties"
+                        Expect.equal 1 shape.Constructors.Length "SimplePoco has 1 public constructor"
+                        Expect.equal 1 shape.Methods.Length "SimplePoco has 1 public method"
+                        true }
+                |> ignore
 
+            | _ -> failwithf "Type %O not recognized as POCO" typeof<SimplePoco>
+
+            let source = new SimplePoco("foo", 42)
+
+            let cloner = mkCloner<SimplePoco>()
+            let target = cloner source
+            Expect.isFalse (obj.ReferenceEquals(source, target)) "SimplePoco should be deep cloned"
+            Expect.equal source.X target.X "SimplePoco.X values should be copied"
+            Expect.equal source.Y target.Y "SimplePoco.Y values should be copied"
         }
 
         test "Shape FSharpFunc" {
-
+            let acceptor =
+                { new IFSharpFuncVisitor<bool> with
+                    member __.Visit<'D,'C>() = typeof<'D> = typeof<int> && typeof<'C> = typeof<string>}
+            match shapeof<int -> string> with 
+            | Shape.FSharpFunc s -> s.Accept acceptor 
+            | _ -> false
+            |> Expect.isTrue <| "Visitor pattern should works with F# Func"
         }
 
         test "Shape Exception" {
+            let accepter =
+                { new IExceptionVisitor<bool> with
+                    member __.Visit<'exn when 'exn :> exn>() = typeof<'exn> = typeof<System.IO.FileNotFoundException> }
+            match shapeof<System.IO.FileNotFoundException> with 
+            | Shape.Exception s -> s.Accept accepter 
+            | _ -> false
+            |> Expect.isTrue <| "Visitor pattern should works with .NET exceptions"
+        }
 
+        test "Shape delegate" {
+            let accepter =
+                { new IDelegateVisitor<bool> with
+                    member __.Visit<'Delegate when 'Delegate :> Delegate>() = typeof<'Delegate> = typeof<Predicate<string>> }
+            match shapeof<Predicate<string>> with 
+            | Shape.Delegate s -> s.Accept accepter 
+            | _ -> false
+            |> Expect.isTrue <| "Visitor pattern should works with .NET delegates"
         }
 
         test "Shape sequence" {
-
+            let accepter e t =
+                { new IEnumerableVisitor<bool> with
+                    member __.Visit<'E, 'T when 'E :> seq<'T>>() = typeof<'T> = t && typeof<'E> = e }
+            testSeq<int [], int> accepter
+            testSeq<int list, int> accepter
+            testSeq<seq<int>, int> accepter
+            testSeq<ResizeArray<int>, int> accepter
+            testSeq<HashSet<int>, int> accepter
+            testSeq<Dictionary<int, string>, KeyValuePair<int,string>> accepter
+            testSeq<Set<int>, int> accepter
+            testSeq<Map<int, string>, KeyValuePair<int,string>> accepter
+            testSeq<IDictionary<int, string>, KeyValuePair<int,string>> accepter
+            testSeq<Stack<int>, int> accepter
         }
 
         test "Shape Collection" {
-
+            let accepter c t =
+                { new ICollectionVisitor<bool> with
+                    member __.Visit<'C, 'T when 'C :> ICollection<'T>>() = typeof<'T> = t && typeof<'C> = c}
+            match shapeof<seq<int>> with 
+            | Shape.Collection s -> s.Accept (accepter typeof<seq<int>> typeof<'T>)
+            | _ -> true
+            |> Expect.isFalse <| "Visitor collection pattern should not work with seq"
+            testCollection<int [], int> accepter
+            testCollection<ResizeArray<int>, int> accepter
+            testCollection<HashSet<int>, int> accepter
+            testCollection<Dictionary<int, string>, KeyValuePair<int,string>> accepter
+            testCollection<Set<int>, int> accepter
+            testCollection<Map<int, string>, KeyValuePair<int,string>> accepter
+            testCollection<IDictionary<int, string>, KeyValuePair<int,string>> accepter
         }
 
         test "Shape Array" {
+            let accepter rk = 
+                { new IArrayVisitor<bool> with
+                    member __.Visit<'T> rank = typeof<'T> = typeof<int> && rank = rk }
 
+            match shapeof<int []> with Shape.Array s -> s.Accept (accepter 1) | _ -> false 
+            |> Expect.isTrue <| "Array visitor works with rank 1 arrays"    
+            match shapeof<int [,]> with Shape.Array s -> s.Accept (accepter 2) | _ -> false 
+            |> Expect.isTrue <| "Array visitor works with rank 2 arrays"
+            match shapeof<int [,,]> with Shape.Array s -> s.Accept (accepter 3) | _ -> false 
+            |> Expect.isTrue <| "Array visitor works with rank 3 arrays"
+            match shapeof<int [,,,]> with Shape.Array s -> s.Accept (accepter 4) | _ -> false 
+            |> Expect.isTrue <| "Array visitor works with rank 4 arrays"
         }
 
         test "Shape ResizeArray" {
+            let accepter = 
+                { new IResizeArrayVisitor<bool> with
+                    member __.Visit<'T>() = typeof<'T> = typeof<int> }
 
+            match shapeof<ResizeArray<int>> with Shape.ResizeArray s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "ResizeAray visitor works with resizable array lists"
         }
 
         test "Shape Dictionary" {
+            let accepter = 
+                { new IDictionaryVisitor<bool> with
+                    member __.Visit<'K, 'V when 'K : equality>() = typeof<'K> = typeof<int> && typeof<'V> = typeof<string> }
 
+            match shapeof<Dictionary<int, string>> with Shape.Dictionary s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "Dictionary visitor works with dictionaries"
         }
 
-        test "Shape FSharpSet" {
+        test "Shape F# Set" {
+            let accepter = 
+                { new IFSharpSetVisitor<bool> with
+                    member __.Visit<'T when 'T : comparison>() = typeof<'T> = typeof<string> }
 
+            match shapeof<Set<string>> with Shape.FSharpSet s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "F# Set visitor works with F# sets"
         }
 
         test "Shape ISerializable" {
+            let accepter =
+                { new ISerializableVisitor<bool> with
+                    member __.Visit<'T when 'T :> ISerializable> (_ : ShapeISerializable<'T>) = typeof<'T> = typeof<exn> }
 
+            match shapeof<exn> with Shape.ISerializable s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "Serializable visitor works with exceptions"
+
+            let exn = new Exception("kaboom!")
+    
+            let cloner = mkCloner<Exception>()
+            let exn' = cloner exn
+            (not (refEq exn exn') && exn.Message = exn'.Message) |> Expect.isTrue <| "Serializable visitor allows to deep clone exceptions"
         }
 
-        test "Shape FSharpOption" {
+        test "Shape F# Option" {
+            let visitor ty =
+                { new IFSharpOptionVisitor<bool> with member __.Visit<'T>() = typeof<'T> = ty }
 
+            match shapeof<int option> with Shape.FSharpOption s -> s.Accept (visitor typeof<int>) | _ -> false
+            |> Expect.isTrue <| "F# option visitor works with F# option type"
         }
 
-        test "Shape FSharpList" {
+        test "Shape F# List" {
+            let visitor ty =
+                { new IFSharpListVisitor<bool> with member __.Visit<'T>() = typeof<'T> = ty }
 
+            match shapeof<int list> with Shape.FSharpList s -> s.Accept (visitor typeof<int>) | _ -> false
+            |> Expect.isTrue <| "F# list visitor works with F# list"
         }
 
-        test "Shape FSharpMap" {
+        test "Shape F# Map" {
+            let accepter = 
+                { new IFSharpMapVisitor<bool> with
+                    member __.Visit<'K, 'V when 'K : comparison>() = typeof<'K> = typeof<string> && typeof<'V> = typeof<int> }
 
+            match shapeof<Map<string, int>> with Shape.FSharpMap s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "F# map visitor works with F# maps"
         }
 
         test "Shape Record" {
+           let shape = 
+               match shapeof<Record7> with
+               | Shape.FSharpRecord (:? ShapeFSharpRecord<Record7> as r) -> r
+               | _ -> raise <| new InvalidCastException()
 
+           Expect.equal 7 shape.Fields.Length "Visitor should detect all fields"
+           let cloner = mkCloner<Record7>()
+           checkCloner cloner
         }
 
         test "Shape F# ref" {
-
+            match shapeof<int ref> with Shape.FSharpRecord r -> r.Fields.Length = 1 | _ -> false
+            |> Expect.isTrue <| "F# record should work on F# ref type"
+            let accepter = { new IFSharpRefVisitor<bool> with member __.Visit<'T>() = typeof<'T> = typeof<int> }
+            match shapeof<int ref> with Shape.FSharpRef s -> s.Accept accepter | _ -> false
+            |> Expect.isTrue <| "F# Ref visitor should work on F# ref type"
         }
 
-        test "Shape FSharpChoice`2" {
-
+        test "Shape F# Choice`2" {
+            let accepter = { new IFSharpChoice2Visitor<bool> with member __.Visit<'T1,'T2>() = typeof<'T1> = typeof<int> && typeof<'T2> = typeof<string> }
+            match shapeof<Choice<int,string>> with Shape.FSharpChoice2 c -> c.Accept accepter | _ -> false
+            |> Expect.isTrue <| "F# Choice visiitor works with Choice types"
         }
-
-        test "Shape FSharpChoice`3" {
-
-        }
-
-        test "Shape FSharpChoice`4" {
-
-        }
-
-        test "Shape FSharpChoice`5" {
-
-        }
-
-        test "Shape FSharpChoice`6" {
-
-        }
-
-        test "Shape FSharpChoice`7" {
-
-        }
+        
 
         test "Shape F# discriminated union" {
+            let shape = 
+                match shapeof<Union7> with 
+                | Shape.FSharpUnion s -> 
+                    s.Accept { new IFSharpUnionVisitor<bool> with
+                        member __.Visit (shape : ShapeFSharpUnion<'U>) =
+                            Expect.equal typeof<Union7> typeof<'U> "F# union visitor correctly recognized union type"
+                            Expect.equal 7 shape.UnionCases.Length "F# union visitor correctly recognized union arity"
+                            true
+                    }
 
+                | _ -> raise <| InvalidCastException()
+
+            let cloner = mkCloner<Union7>()
+            checkCloner cloner
         }
 
         test "Shape F# option as discriminated union" {
-
+            match shapeof<int option> with Shape.FSharpUnion u -> u.UnionCases.Length = 2 | _ -> false
+            |> Expect.isTrue <| "F# union visitor works with F# option type"
         }
 
         test "Shape F# list as discriminated union" {
-
+            match shapeof<int list> with Shape.FSharpUnion u -> u.UnionCases.Length = 2 | _ -> false
+            |> Expect.isTrue <| "F# union visitor works with F# list type"
         }
 
         test "Shape F# choice as discriminated union" {
-
+            match shapeof<Choice<int,string,bool>> with Shape.FSharpUnion u -> u.UnionCases.Length = 3 | _ -> false
+            |> Expect.isTrue <| "F# union visitor works with F# Choice type"
         }
 
         test "Shape clone recursive types" {
-
+            let cloner = mkCloner<P>()
+            checkCloner cloner
         }
 
         test "BinSearch should report correct indices" {
+            let property (inputs : string []) =
+                let inputs = Array.distinct inputs
+                let binSearch = BinSearch inputs
+                inputs 
+                |> Seq.mapi (fun i v -> i,v)
+                |> Seq.forall (fun (i,v) -> binSearch.TryFindIndex v = i)
 
+            Check.QuickThrowOnFailure property
         }
 
         test "BinSearch should return -1 on non-existingValues" {
+            let property (inputs : Set<string>) (otherValues : Set<string>) =
+                let binSearch = BinSearch (Set.toArray inputs)
+                let missingValues = otherValues - inputs
+                missingValues
+                |> Seq.forall (fun v -> binSearch.TryFindIndex v = -1)
 
+            Check.QuickThrowOnFailure property
         }
 
         test "Should support struct records" {
+            match shapeof<StructRecord> with
+            | Shape.FSharpRecord (:? ShapeFSharpRecord<StructRecord> as s) ->
+                (s.IsStructRecord && s.Fields.Length = 2) |> Expect.isTrue <| "F# record visitor works with F# struct records"
+            | _ -> raise <| InvalidCastException()
 
+            let cloner = mkCloner<StructRecord>()
+            checkCloner cloner
         }
 
         test "Should support struct unions" {
+            match shapeof<StructUnion> with
+            | Shape.FSharpUnion (:? ShapeFSharpUnion<StructUnion> as s) ->
+                (s.IsStructUnion && s.UnionCases.Length = 4 (* 6 *)) |> Expect.isTrue <| "F# union visitor works with F# struct unions"
+                let fieldTypes = s.UnionCases |> Array.map (fun c -> c.Fields |> Array.map (fun f -> f.Member.Type))
+                Expect.equal fieldTypes [|
+                                [|typeof<int>|]
+                                //[|typeof<int>|]
+                                [||]
+                                [|typeof<string>|];
+                                [|typeof<byte[]>;typeof<int64>|]
+                                //[||]
+                            |]  "F# union visitor recognizes F# struct union fields"
+            | _ -> raise <| InvalidCastException()
 
+            let cloner = mkCloner<StructUnion>()
+            checkCloner cloner
         }
 
         test "Should support struct tuples" {
+            let testStructTuple (stuple : 'STuple) =
+                let elems = FSharp.Reflection.FSharpType.GetTupleElements typeof<'STuple>
+                match shapeof<'STuple> with
+                | Shape.Tuple (:? ShapeTuple<'STuple> as s) ->
+                    Expect.isTrue s.IsStructTuple "F# tuple visitor works with struct tuples"
+                    Expect.equal elems (s.Elements |> Array.map (fun e -> e.Member.Type)) "F# tuple visitor picks tuple fields"
+                | _ -> raise <| InvalidCastException()
 
+                let cloner = mkCloner<'STuple>()
+                Expect.equal stuple (cloner stuple) "F# tuple visitor deep clones structural tuples"
+                
+            testStructTuple (struct(1,"2"))
+            testStructTuple (struct(1,"3",2,"4",5,"5",6,"7",8,"9",10))
+            testStructTuple (struct(1,"3",2,"4",5,"5",6,"7",8,"9",10,"11",12,"13",14,"15",16,"17"))
         }
     ]

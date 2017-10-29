@@ -1,3 +1,4 @@
 System.ValueTuple
 Expecto
 Expecto.BenchmarkDotNet
+FsCheck

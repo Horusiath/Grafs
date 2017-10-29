@@ -5,23 +5,26 @@
 module Grafs.Tests.Prolog
 
 open System
-open System.Collections.Concurrent
+open System.Runtime.Serialization
 open Grafs.TypeShape
+open FsCheck
 
 let sync = Async.RunSynchronously
-
+let inline refEq<'T when 'T : not struct> (x : 'T) (y : 'T) = obj.ReferenceEquals(x, y)
+let check<'T>(prop: 'T -> bool) = Check.QuickThrowOnFailure prop
+let checkCloner (cloner : 'T -> 'T) = check(fun t -> t = cloner t)
 
 // Simple object clone implementation used to verify implementation correctness of shapes
 
 let rec mkCloner<'T> () : 'T -> 'T =
-    match cache.TryGetValue(typeof<'T -> 'T>) with
-    | true, c -> c
-    | false, _ ->
+    match cache.TryFind<'T -> 'T> () with
+    | Some c -> c
+    | None ->
         use ctx = cache.CreateRecTypeManager()
         mkClonerCached<'T> ctx
 
 and private mkClonerCached<'T> (ctx : RecTypeManager) : 'T -> 'T =
-    match ctx.TryGetValue(typeof<'T -> 'T>) with
+    match ctx.TryFind<'T -> 'T> () with
     | Some c -> c
     | None ->
         let _ = ctx.CreateUninitialized<'T -> 'T>(fun c t -> c.Value t)
@@ -131,4 +134,4 @@ and private mkClonerAux<'T> (ctx : RecTypeManager) : 'T -> 'T =
 
     | _ -> failwithf "Unsupported type %O" typeof<'T>
 
-and private cache : ConcurrentDictionary<_,_> = ConcurrentDictionary()
+and private cache : TypeCache = TypeCache ()
