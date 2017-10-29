@@ -1443,7 +1443,7 @@ and IShapeMethod<'DeclaringType> =
     abstract Accept : IMethodVisitor<'DeclaringType, 'R> -> 'R
     
 /// Identifies a constructor implementation shape
-and ShapeMethod<'DeclaringType, 'Args> private (minfo: MemberInfo, arity : int) =
+and ShapeMethod<'DeclaringType, 'Args, 'ReturnedType> private (minfo: MethodInfo, arity : int) =
     let valueReader = 
         match arity with
         | 0 -> fun _ -> [||]
@@ -1451,9 +1451,30 @@ and ShapeMethod<'DeclaringType, 'Args> private (minfo: MemberInfo, arity : int) 
         |_ -> FSharpValue.PreComputeTupleReader typeof<'Args>
 
     /// Creates an instance of declaring type with supplied constructor args
-    member __.Invoke(args : 'Args) =
+    member __.Invoke(instance: 'DeclaringType, args : 'Args) =
         let args = valueReader args
-        minfo.Invoke()  args :?> 'DeclaringType
+        minfo.Invoke(instance, args) :?> 'ReturnedType
+        
+#if TYPESHAPE_EXPR
+    /// Creates an instance of declaring type with supplied constructor args
+    member __.InvokeExpr(instance: Expr<'DeclaringType>, args : Expr<'CtorArgs>) : Expr<'ReturnedType> =
+        let exprArgs = 
+            match arity with
+            | 1 -> [args :> Expr]
+            | _ -> [for i in 0 .. arity - 1 -> Expr.TupleGet(args, i)]
+
+        Expr.Cast<'ReturnedType>(Expr.Call(instance, minfo, exprArgs))
+#endif
+
+    interface IShapeMethod<'DeclaringType> with
+        member __.IsPublic = minfo.IsPublic
+        member __.Arity = arity
+        member __.MethodInfo = minfo
+        member __.Arguments = shapeof<'CtorArgs>
+        member __.Accept v = v.Visit __
+
+and IMethodVisitor<'Type, 'R> =
+    abstract Visit<'Args, 'Return> : ShapeMethod<'Type, 'Args, 'Return> -> 'R
 
 //---------------------------
 // Supplementary Member utils
@@ -1496,14 +1517,15 @@ module private MemberUtils2 =
     let mkMethodUntyped<'Record> (label : string) (mInfo : MethodInfo) =
         let argTypes = mInfo.GetParameters() |> Array.map (fun p -> p.ParameterType)
         let arity = argTypes.Length
+        let returnedType = mInfo.ReturnType
         let argumentType =
             match arity with
             | 0 -> typeof<unit>
             | 1 -> argTypes.[0]
             | _ -> FSharpType.MakeTupleType argTypes
 
-        Activator.CreateInstanceGeneric<ShapeMember<_,_>>([|typeof<'Record>; argumentType|], [|box mInfo; box arity|])
-        :?> IShapeMember<'Record>
+        Activator.CreateInstanceGeneric<ShapeMethod<_,_,_>>([|typeof<'Record>; argumentType; returnedType|], [|box mInfo; box arity|])
+        :?> IShapeMethod<'Record>
 
 //--------------------
 // Generic Tuple Shape
@@ -1868,7 +1890,7 @@ type IShapePoco =
     /// Property shapes for the type
     abstract Properties : IShapeMember[]
     /// Method shapes for the type
-    abstract Methods : IShapeMember[]
+    abstract Methods : IShapeMethod[]
     abstract Accept : IPocoVisitor<'R> -> 'R
 
 /// Denotes any .NET type that is either a class or a struct
@@ -1890,7 +1912,7 @@ and ShapePoco<'Poco> private () =
         typeof<'Poco>.GetMethods(allInstanceMembers)
         // filter any ctors that accept byrefs or pointers
         |> Seq.filter (fun m -> m.GetParameters() |> Array.exists(fun p -> let t = p.ParameterType in t.IsPointer || t.IsByRef) |> not)
-        |> Seq.map (fun m -> mkMethodUntyped<'Poco> c)
+        |> Seq.map (fun m -> mkMethodUntyped<'Poco> m.Name m)
         |> Seq.toArray
 
     let properties =
